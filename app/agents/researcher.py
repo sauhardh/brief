@@ -1,5 +1,5 @@
 from openai import OpenAI
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from app.state import ResearchFinding, WorkflowState
 import logging

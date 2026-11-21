@@ -14,6 +14,7 @@ class Analysis(BaseModel):
     competitors: list[str]
     missing_info: list[str]
     confidence: str
+    sources: list[str] = []
 
 
 class Criticism(BaseModel):

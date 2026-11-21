@@ -39,8 +39,33 @@ class Orchestrator:
         self.query = query
         return WorkflowState(query=query.strip())
 
-    # def run_pipeline(self):
-    # self.start_workflow(gcl)
+    def run_pipeline(self, query: str):
+        state = self.start_workflow(query)
+
+        # 1. Researcher
+        state = self.researcher.run(state)
+
+        # 2. Analyst (initial draft)
+        state = self.analyst.run(state)
+
+        # 3. Critic (review)
+        state = self.critic.run(state)
+
+        # Before revision
+        _initial_draft = state.analysis
+
+        # 4. Up to 1 revision if requested
+        if (
+            state.criticism
+            and state.criticism.revision_required
+            and state.revision_count < 1
+        ):
+            log.info("Got CRITICIZED heavily. Revisioning...")
+            state.revision_count += 1
+            state = self.analyst.run(state)
+
+        state.final_brief = state.analysis
+        return state
 
     def __select_method(self, model_name: str | None):
         if self.api_key:

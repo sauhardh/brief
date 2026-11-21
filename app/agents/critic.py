@@ -16,10 +16,12 @@ class Critic:
                 "Evaluate the draft research brief against the provided research findings.\n\n"
                 "Criteria:\n"
                 "1. Evidence Grounding: Are all claims strictly supported by findings?\n"
-                "2. Competitor Rule: Ensure if there are competitors or not\n"
+                "2. Competitor Rule: Ensure there are at most TWO competitors (if relevant).\n"
                 "3. Completeness: Check summary, observations, sources, and missing info.\n\n"
-                "If acceptable: approved=true, revision_required=false.\n"
-                "If flaws exist: approved=false, revision_required=true, with specific actionable feedback."
+                "Return a valid JSON object with these EXACT keys:\n"
+                "- approved: boolean (true if brief is good, false if changes needed)\n"
+                "- feedback: list of strings (actionable feedback items)\n"
+                "- revision_required: boolean (true if revision needed, false if acceptable)"
             ),
         }
 
@@ -36,15 +38,18 @@ class Critic:
             },
         ]
 
-        completion = self.client.beta.chat.completions.parse(
-            model=self.model_name, messages=messages, response_format=Criticism
+        completion = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.1,
         )
 
-        response = completion.choices[0].message.parsed
-        if not response:
+        content = completion.choices[0].message.content
+        if not content:
             raise ValueError("Critic failed to generate structured critique.")
 
-        state.criticism = response
+        state.criticism = Criticism.model_validate_json(content)
         return state
 
     def _build_critic_prompt(self, state: WorkflowState) -> str:

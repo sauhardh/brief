@@ -12,12 +12,16 @@ class Analyst:
         self.prompt: ChatCompletionMessageParam = {
             "role": "system",
             "content": (
-                "You are a market analyst. "
-                "Synthesize the provided research findings "
-                "into a research brief. "
-                "Follow strict evidence grounding. "
-                "Identify up to 2 competitors if relevant. "
-                "Never invent facts or sources."
+                "You are a market analyst. Synthesize the provided research findings "
+                "into a concise research brief. Follow strict evidence grounding. "
+                "Identify up to 2 competitors if relevant. Never invent facts or sources.\n\n"
+                "Return a valid JSON object with these EXACT keys:\n"
+                "- summary: string (concise overview of the market/topic)\n"
+                "- key_observations: list of strings (key insights/trends)\n"
+                "- competitors: list of strings (maximum 2 competitors, or empty list)\n"
+                "- sources: list of strings (source URLs or descriptions)\n"
+                "- missing_info: list of strings (uncertainties or data gaps)\n"
+                "- confidence: string ('high', 'medium', or 'low')"
             ),
         }
 
@@ -35,15 +39,20 @@ class Analyst:
             },
         ]
 
-        completion = self.client.beta.chat.completions.parse(
-            model=self.model_name, messages=messages, response_format=Analysis
+        completion = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.2,
         )
 
-        response = completion.choices[0].message.parsed
-        if not response:
+        content = completion.choices[0].message.content
+        if not content:
             raise ValueError("Analyst returned an empty response.")
 
-        state.analysis = response
+        analysis = Analysis.model_validate_json(content)
+        analysis.competitors = analysis.competitors[:2]
+        state.analysis = analysis
         return state
 
     def _build_draft_prompt(self, state: WorkflowState) -> str:
@@ -51,9 +60,13 @@ class Analyst:
             "\n".join(
                 f"- [{f.title}] {f.claim} (Source: {f.source})" for f in state.findings
             )
-            or "No findings available."
+            or "No web findings available. State that no findings were retrieved."
         )
-        return f"""Market Query: {state.query} Research Findings: {findings_text}. Generate the structured JSON research brief."""
+        return (
+            f"Market Query: {state.query}\n\n"
+            f"Research Findings:\n{findings_text}\n\n"
+            "Synthesize the findings into the required JSON research brief."
+        )
 
     def _build_revision_prompt(self, state: WorkflowState) -> str:
         feedback_text = "\n".join(
@@ -62,4 +75,9 @@ class Analyst:
         previous_brief = (
             state.analysis.model_dump_json(indent=2) if state.analysis else "{}"
         )
-        return f"""Market Query: {state.query} Previous Brief: {previous_brief}. Critic Feedback to address {feedback_text}. Produce a revised structured JSON research brief resolving the issues."""
+        return (
+            f"Market Query: {state.query}\n\n"
+            f"Previous Brief:\n{previous_brief}\n\n"
+            f"Critic Feedback to resolve:\n{feedback_text}\n\n"
+            "Revise the brief addressing all feedback. Return ONLY the valid JSON research brief."
+        )
