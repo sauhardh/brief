@@ -3,17 +3,17 @@ from typing import Optional
 
 
 class ResearchFinding(BaseModel):
+    title: str
     claim: str
     source: Optional[str] = None
-    confidence: str
 
 
 class Analysis(BaseModel):
     summary: str
-    competitors: list[str]
     key_observations: list[str]
-    sources: list[str]
+    competitors: list[str]
     missing_info: list[str]
+    confidence: str
 
 
 class Criticism(BaseModel):

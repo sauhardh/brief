@@ -39,6 +39,9 @@ class Orchestrator:
         self.query = query
         return WorkflowState(query=query.strip())
 
+    # def run_pipeline(self):
+    # self.start_workflow(gcl)
+
     def __select_method(self, model_name: str | None):
         if self.api_key:
             log.info("Going with Groq api key")
