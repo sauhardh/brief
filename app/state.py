@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional
 
 
@@ -21,6 +21,12 @@ class Criticism(BaseModel):
     approved: bool
     feedback: list[str]
     revision_required: bool
+
+    @model_validator(mode="after")
+    def auto_set_revision(self):
+        if not self.approved:
+            self.revision_required = True
+        return self
 
 
 class WorkflowState(BaseModel):

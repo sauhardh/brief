@@ -1,7 +1,11 @@
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
+from pydantic import ValidationError
+import logging
 
 from app.state import Analysis, WorkflowState
+
+log = logging.getLogger(__name__)
 
 
 class Analyst:
@@ -25,11 +29,19 @@ class Analyst:
             ),
         }
 
-    def run(self, state: WorkflowState) -> WorkflowState:
+    def run(
+        self,
+        state: WorkflowState,
+        retries_left: int = 2,
+        feedback_msg: str | None = None,
+    ) -> WorkflowState:
         if state.criticism and state.criticism.revision_required and state.analysis:
             user_content = self._build_revision_prompt(state)
         else:
             user_content = self._build_draft_prompt(state)
+
+        if feedback_msg:
+            user_content += f"\n\nPREVIOUS ERROR TO FIX:\n{feedback_msg}"
 
         messages: list[ChatCompletionMessageParam] = [
             self.prompt,
@@ -50,9 +62,32 @@ class Analyst:
         if not content:
             raise ValueError("Analyst returned an empty response.")
 
-        analysis = Analysis.model_validate_json(content)
-        analysis.competitors = analysis.competitors[:2]
-        state.analysis = analysis
+        try:
+            analysis = Analysis.model_validate_json(content)
+            analysis.competitors = analysis.competitors[:2]
+            state.analysis = analysis
+        except ValidationError as err:
+            log.warning(
+                f"Analyst validation failed ({retries_left} retries left): {err}"
+            )
+
+            if retries_left <= 0:
+                raise ValueError(f"Analyst failed schema validation: {err}")
+
+            feedback_msg = (
+                f"Your response had this validation error:\n{err}\n\n"
+                "Please correct the JSON and return ALL required keys: "
+                "- summary: str\n"
+                "- key_observations: list of str\n"
+                "- competitors: list of str (max 2)\n"
+                "- sources: list of str\n"
+                "- missing_info: list of str\n"
+                "- confidence: str ('high', 'medium', or 'low')"
+            )
+
+            return self.run(
+                state, retries_left=retries_left - 1, feedback_msg=feedback_msg
+            )
         return state
 
     def _build_draft_prompt(self, state: WorkflowState) -> str:

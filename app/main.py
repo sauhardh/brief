@@ -2,6 +2,12 @@ import streamlit as st
 from app.agents import orchestrator
 from app.agents.orchestrator import Orchestrator
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+
 st.set_page_config(page_title="Market Research Brief", page_icon="📊", layout="wide")
 
 st.title("📊 Multi-Agent Market Research Brief")
@@ -94,7 +100,9 @@ if start_button:
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("### 4. Sources Cited")
-            sources = state.final_brief.sources or [f.source for f in state.findings if f.source]
+            sources = state.final_brief.sources or [
+                f.source for f in state.findings if f.source
+            ]
             unique_sources = list(dict.fromkeys(sources))
 
             if unique_sources:
