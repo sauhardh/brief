@@ -23,6 +23,9 @@ class Critic:
                 "1. Evidence Grounding: Are all claims strictly supported by findings?\n"
                 "2. Competitor Rule: Ensure there are at most TWO competitors (if relevant).\n"
                 "3. Completeness: Check summary, observations, sources, and missing info.\n\n"
+                "CRITICAL FORMAT RULE:\n"
+                "You must output ONLY a valid, parseable JSON object starting directly with '{' and ending with '}'.\n"
+                "Do NOT include markdown formatting (no ```json or ```), no conversational preamble, no commentary.\n\n"
                 "Return a valid JSON object with these EXACT keys:\n"
                 "- approved: boolean (true if brief is good, false if changes needed)\n"
                 "- feedback: list of strings (actionable feedback items)\n"
@@ -51,19 +54,45 @@ class Critic:
             },
         ]
 
-        completion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            response_format={"type": "json_object"},
-            temperature=0.1,
-        )
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+        except Exception as api_err:
+            log.warning(
+                f"Critic API call failed with {type(api_err).__name__} ({retries_left} retries left): {api_err}"
+            )
+            if retries_left <= 0:
+                raise
+
+            retry_feedback = (
+                "CRITICAL: Your previous generation failed API JSON validation. "
+                "Output MUST be pure, valid JSON starting directly with '{' and ending with '}'. "
+                "Do not include markdown codeblocks, text, or explanations."
+            )
+            return self.run(
+                state, retries_left=retries_left - 1, feedback_msg=retry_feedback
+            )
 
         content = completion.choices[0].message.content
         if not content:
             raise ValueError("Critic failed to generate structured critique.")
 
+        # Strip any markdown code fence wrapping if present
+        clean_content = content.strip()
+        if clean_content.startswith("```"):
+            lines = clean_content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            clean_content = "\n".join(lines).strip()
+
         try:
-            state.criticism = Criticism.model_validate_json(content)
+            state.criticism = Criticism.model_validate_json(clean_content)
         except ValidationError as err:
             log.warning(f"Validation failed ({retries_left} retries left): {err}")
 

@@ -16,7 +16,9 @@ st.markdown(
 
 
 # Initialize Orchestrator once and cache
-@st.cache_resource
+@st.cache_resource(
+    show_spinner="🐳 Starting Docker search engine (SearXNG) & initializing agents... Please wait..."
+)
 def get_orchestrator():
     return Orchestrator()
 

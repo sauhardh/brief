@@ -19,6 +19,9 @@ class Analyst:
                 "You are a market analyst. Synthesize the provided research findings "
                 "into a concise research brief. Follow strict evidence grounding. "
                 "Identify up to 2 competitors if relevant. Never invent facts or sources.\n\n"
+                "CRITICAL FORMAT RULE:\n"
+                "You must output ONLY a valid, parseable JSON object starting directly with '{' and ending with '}'.\n"
+                "Do NOT include markdown formatting (no ```json or ```), no conversational preamble, no commentary.\n\n"
                 "Return a valid JSON object with these EXACT keys:\n"
                 "- summary: string (concise overview of the market/topic)\n"
                 "- key_observations: list of strings (key insights/trends)\n"
@@ -51,19 +54,45 @@ class Analyst:
             },
         ]
 
-        completion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            response_format={"type": "json_object"},
-            temperature=0.2,
-        )
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.2,
+            )
+        except Exception as api_err:
+            log.warning(
+                f"Analyst API call failed with {type(api_err).__name__} ({retries_left} retries left): {api_err}"
+            )
+            if retries_left <= 0:
+                raise
+
+            retry_feedback = (
+                "CRITICAL: Your previous generation failed API JSON validation. "
+                "Output MUST be pure, valid JSON starting directly with '{' and ending with '}'. "
+                "Do not include markdown codeblocks, text, or explanations."
+            )
+            return self.run(
+                state, retries_left=retries_left - 1, feedback_msg=retry_feedback
+            )
 
         content = completion.choices[0].message.content
         if not content:
             raise ValueError("Analyst returned an empty response.")
 
+        # Strip any markdown code fence wrapping if present
+        clean_content = content.strip()
+        if clean_content.startswith("```"):
+            lines = clean_content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            clean_content = "\n".join(lines).strip()
+
         try:
-            analysis = Analysis.model_validate_json(content)
+            analysis = Analysis.model_validate_json(clean_content)
             analysis.competitors = analysis.competitors[:2]
             state.analysis = analysis
         except ValidationError as err:
@@ -100,7 +129,8 @@ class Analyst:
         return (
             f"Market Query: {state.query}\n\n"
             f"Research Findings:\n{findings_text}\n\n"
-            "Synthesize the findings into the required JSON research brief."
+            "INSTRUCTION: Synthesize the findings into the required JSON research brief. "
+            "Output MUST start with '{' and end with '}'. Return ONLY valid raw JSON."
         )
 
     def _build_revision_prompt(self, state: WorkflowState) -> str:
@@ -114,5 +144,6 @@ class Analyst:
             f"Market Query: {state.query}\n\n"
             f"Previous Brief:\n{previous_brief}\n\n"
             f"Critic Feedback to resolve:\n{feedback_text}\n\n"
-            "Revise the brief addressing all feedback. Return ONLY the valid JSON research brief."
+            "INSTRUCTION: Revise the brief addressing all feedback. Do not explain changes or apologize. "
+            "Output MUST start directly with '{' and end with '}'. Return ONLY valid raw JSON matching the required schema."
         )

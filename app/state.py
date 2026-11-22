@@ -19,8 +19,8 @@ class Analysis(BaseModel):
 
 class Criticism(BaseModel):
     approved: bool
-    feedback: list[str]
-    revision_required: bool
+    feedback: list[str] = []
+    revision_required: bool = False
 
     @model_validator(mode="after")
     def auto_set_revision(self):
