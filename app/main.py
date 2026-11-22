@@ -117,7 +117,7 @@ if start_button:
         st.write(state.final_brief.summary)
 
         # 2. Competitors
-        st.markdown("### 2. Main Competitors (Up to 2)")
+        st.markdown("### 2. Main Competitors")
         if state.final_brief.competitors:
             cols = st.columns(len(state.final_brief.competitors))
             for idx, comp in enumerate(state.final_brief.competitors):
