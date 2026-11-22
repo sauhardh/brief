@@ -34,32 +34,36 @@ class Researcher:
         optimized_query = self._generate_search_query(state.query)
         log.info(f"Optimized search query: '{optimized_query}'")
 
+        queries_to_try = [optimized_query, state.query]
         findings: list[ResearchFinding] = []
-        try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(optimized_query, max_results=5))
+        for q in queries_to_try:
+            log.info(f"Attempting web search with query: '{q}'")
+            try:
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(q, max_results=5))
 
-            for item in results:
-                href = item.get("href", "")
-                # Skip sponsored search ads
-                if "aclick" in href or "ad." in href or "doubleclick" in href:
-                    continue
+                for item in results:
+                    href = item.get("href", "")
+                    # Skip sponsored search ads
+                    if "aclick" in href or "ad." in href or "doubleclick" in href:
+                        continue
 
-                title = item.get("title", "")
-                snippet = item.get("body", "")
+                    title = item.get("title", "")
+                    snippet = item.get("body", "")
 
-                if snippet:
-                    findings.append(
-                        ResearchFinding(title=title, claim=snippet, source=href)
-                    )
+                    if snippet:
+                        findings.append(
+                            ResearchFinding(title=title, claim=snippet, source=href)
+                        )
 
-        except Exception as e:
-            log.error(f"Could not search your request on web {e}")
-
-        log.info(f"Findings: {findings}")
+                if findings:
+                    log.info(f"Found {len(findings)} results with query: '{q}'")
+                    break
+            except Exception as e:
+                log.warning(f"Search failed for query '{q}': {e}")
 
         if not findings:
-            log.error("Your findings is empty.")
+            log.error("All search queries failed; findings list is empty.")
 
         state.findings = findings
         return state

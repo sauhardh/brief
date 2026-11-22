@@ -1,5 +1,4 @@
 import streamlit as st
-from app.agents import orchestrator
 from app.agents.orchestrator import Orchestrator
 
 import logging
@@ -8,9 +7,9 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 
-st.set_page_config(page_title="Market Research Brief", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Market Research Brief", page_icon="", layout="wide")
 
-st.title("📊 Multi-Agent Market Research Brief")
+st.title("Market Researcher")
 st.markdown(
     "Enter a company or industry topic to generate a research brief using a 4-agent workflow."
 )
@@ -40,21 +39,30 @@ query = st.text_input(
 start_button = st.button("Start Research", type="primary", disabled=not query.strip())
 
 
+def start():
+    st.write("**Orchestrator**: Initializing state...")
+    state = orchestrator.start_workflow(query)
+
+    st.write("**Researcher**: Gathering web search evidence...")
+    state = orchestrator.researcher.run(state)
+    st.write(f"✓ Researcher collected {len(state.findings)} evidence points.")
+
+    if not state.findings:
+        st.error("⚠️ Web search returned no results (rate-limited by search engines).")
+
+    st.write("**Analyst**: Synthesizing initial brief draft...")
+    state = orchestrator.analyst.run(state)
+    st.write("✓ Initial draft completed.")
+
+    st.write("**Critic**: Reviewing draft against evidence...")
+    state = orchestrator.critic.run(state)
+
+    return state
+
+
 if start_button:
     with st.status("Executing Multi-Agent Workflow...", expanded=True) as status:
-        st.write("**Orchestrator**: Initializing state...")
-        state = orchestrator.start_workflow(query)
-
-        st.write("**Researcher**: Gathering web search evidence...")
-        state = orchestrator.researcher.run(state)
-        st.write(f"✓ Researcher collected {len(state.findings)} evidence points.")
-
-        st.write("**Analyst**: Synthesizing initial brief draft...")
-        state = orchestrator.analyst.run(state)
-        st.write("✓ Initial draft completed.")
-
-        st.write("**Critic**: Reviewing draft against evidence...")
-        state = orchestrator.critic.run(state)
+        state = start()
 
         if state.criticism:
             if state.criticism.revision_required and state.revision_count < 1:
@@ -66,6 +74,32 @@ if start_button:
                 state.revision_count += 1
                 state = orchestrator.analyst.run(state)
                 st.write("✓ Revised brief generated.")
+
+                st.write("**Critic**: Reviewing revised draft against evidence...")
+                state = orchestrator.critic.run(state)
+
+                if (
+                    state.criticism
+                    and state.criticism.revision_required
+                    and 0 < state.revision_count < 2
+                ):
+                    st.warning(
+                        "Critic rejected revised brief. Feedback: "
+                        + "; ".join(state.criticism.feedback)
+                        + ". Restarting research workflow from scratch for final attempt..."
+                    )
+
+                    state = start()
+                    state.revision_count += 2
+
+                    if state.criticism and not state.criticism.revision_required:
+                        st.write("✓ Critic approved draft after restart.")
+                    else:
+                        st.warning(
+                            "Final attempt completed. Proceeding with latest brief."
+                        )
+                else:
+                    st.write("✓ Critic approved revised draft.")
             else:
                 st.write("✓ Critic approved draft.")
 
