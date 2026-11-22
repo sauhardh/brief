@@ -112,7 +112,7 @@ if start_button:
 
     # Display Final Brief
     if state.final_brief:
-        st.subheader("📋 Research Brief")
+        st.subheader("Research Brief")
 
         # 1. Summary
         st.markdown("### 1. Executive Summary")
@@ -123,7 +123,7 @@ if start_button:
         if state.final_brief.competitors:
             cols = st.columns(len(state.final_brief.competitors))
             for idx, comp in enumerate(state.final_brief.competitors):
-                cols[idx].info(f"🏢 **{comp}**")
+                cols[idx].info(f"**{comp}**")
         else:
             st.write("No direct competitors identified from available findings.")
 
